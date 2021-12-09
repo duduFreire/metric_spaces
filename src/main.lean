@@ -496,28 +496,104 @@ theorem monotone_convergence_decreasing {x : ℕ → ℝ}
  (hx_decreases : is_decreasing_seq x)
 (hx_bounded_below : is_bounded_below_seq x) : seq_converges ℝ dist_real x :=
 begin 
-  have hnew_seq_increasing : is_increasing_seq (λn, (-1) * (x n)) := sorry,
-  have hnew_seq_bdd_above  : is_bounded_above_seq (λn, (-1) * (x n)) := sorry,
+  have hnew_seq_increasing : is_increasing_seq (λn, (-1) * (x n)),
+  {
+    intros n m hnm,
+    have := hx_decreases n m hnm,
+    finish,
+  },
+  have hnew_seq_bdd_above  : is_bounded_above_seq (λn, (-1) * (x n)),
+  {
+    cases hx_bounded_below with M hM,
+    use (-1) * M,
+    intro n,
+    unfold is_lower_bound_for_seq at hM,
+    finish,
+  },
   have hnew_seq_converges  := monotone_convergence_increasing 
    hnew_seq_increasing hnew_seq_bdd_above,
 
   cases hnew_seq_converges with L hL,
   have almost := lim_of_mult_const_seq (λn, (-1) * (x n)) L hL (-1),
-  sorry,
+  use (-L),
+  intros ε hε,
+  specialize almost ε hε,
+  cases almost with N hN,
+  use N,
+  intros n hn,
+  specialize hN n hn,
+  finish,
 end
 
 lemma cauchy_seq_of_reals_is_bounded (x : ℕ → ℝ) (hx : is_cauchy ℝ dist_real x) :
 is_bounded_seq x := sorry
 
-def is_peak_term (n : ℕ) (x : ℕ → ℝ) : Prop := ∀m : ℕ, x m ≤ x n
+def is_peak_term (n : ℕ) (x : ℕ → ℝ) : Prop := ∀(m : ℕ)(hm: m ≥ n), x m ≤ x n
 
-open_locale classical
+
+noncomputable def peak_func {x : ℕ → ℝ}(h : ∀(n : ℕ), ∃(m : ℕ)(hmn : m > n),(is_peak_term m x)) :
+ℕ → ℕ 
+| 0 := classical.some (h 0) 
+| (b+1) := classical.some (h (peak_func b)) 
+
+lemma peak_func_is_extraction {x : ℕ → ℝ}
+(h : ∀(n : ℕ), ∃(m : ℕ)(hmn : m > n),(is_peak_term m x)):
+ is_extraction (peak_func h) := sorry
+
+ lemma peak_func_is_peaks {x : ℕ → ℝ}
+(h : ∀(n : ℕ), ∃(m : ℕ)(hmn : m > n),(is_peak_term m x)) : 
+∀(n : ℕ), is_peak_term (peak_func h n) x := sorry
+
 
 lemma seq_has_monotone_subseq (x : ℕ → ℝ) : ∃(y:ℕ → ℝ) (hy : is_subseq y x),
-is_monotone_seq y := sorry
+is_monotone_seq y := 
+begin 
+  by_cases ∀(n : ℕ), ∃(m : ℕ)(hmn : m > n),(is_peak_term m x),
+  {
+    let φ := peak_func h,
+    use x ∘ φ,
+    split,
+    {
+      use φ,
+      exact ⟨peak_func_is_extraction h, rfl⟩,
+    },
+    {
+      right,
+      intros n m hnm,
+      by_cases h1 : m = n,
+      rw h1, exact rfl.ge,
+      have := peak_func_is_extraction h n m ((ne.symm h1).le_iff_lt.mp hnm),
+      exact peak_func_is_peaks h n (φ m) (le_of_lt this),
+    },
+  },
+  {
+    unfold is_peak_term at h,
+    push_neg at h,
+    sorry
+  },
+end
 
-def subseq_of_bdd {x: ℕ → ℝ} (hx : is_bounded_seq x) {y : ℕ → ℝ}
-(hy : is_subseq y x) : is_bounded_seq y := sorry
+lemma subseq_of_bdd {x: ℕ → ℝ} (hx : is_bounded_seq x) {y : ℕ → ℝ}
+(hy : is_subseq y x) : is_bounded_seq y := 
+begin 
+  split,
+  {
+    cases hx.left with M hM,
+    use M,
+    intros n,
+    rcases hy with ⟨φ, hφ, hyx⟩,
+    rw hyx,
+    exact hM (φ n),
+  },
+  {
+    cases hx.right with M hM,
+    use M,
+    intros n,
+    rcases hy with ⟨φ, hφ, hyx⟩,
+    rw hyx,
+    exact hM (φ n),
+  },
+end
 
 
 theorem bolzano_weierstrass (x: ℕ → ℝ) (hx : is_bounded_seq x) : 
