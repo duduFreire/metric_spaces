@@ -6,7 +6,7 @@ import data.set
 noncomputable theory
 
 variable X : Type
-variable d: X → X → ℝ
+variable d : X → X → ℝ
 
 
 def dist_refl := ∀(x y: X), d x y = 0 ↔ x = y
@@ -100,12 +100,45 @@ begin
   },
 end
 
+lemma lim_of_mult_const_seq (x : ℕ → ℝ) (L : ℝ) 
+(hx : seq_lim ℝ dist_real x L) (k : ℝ) : seq_lim ℝ dist_real (λn, k * (x n)) (k*L) :=
+begin 
+  intros ε hε,
+    by_cases |k| = 0,
+    {
+    use 0,
+    intros n hn,
+    have : k = 0 := abs_eq_zero.mp h,
+    rw this,
+    change (λ (n : ℕ), 0 * x n) n with 0 * x n,
+    rw zero_mul (x n),
+    rw zero_mul L,
+    have : dist_real 0 0 = |(0:ℝ)-(0:ℝ)| := by refl,
+    rw this,
+    have : (0:ℝ)-(0:ℝ)=0 := sub_zero 0,
+    rw this,
+    rw abs_zero,
+    exact hε,
+  },
+  {
+   have hk_pos : |k| > 0 := (ne.symm h).le_iff_lt.mp (abs_nonneg k), 
+   cases hx (ε/|k|) (div_pos hε hk_pos) with N hN,
+   use N,
+   intros n hn,
+   change |k * (x n) - (k * L)| < ε,
+   ring_nf,
+   rw abs_mul (x n - L) k,
+   rw (lt_div_iff hk_pos).symm,
+   exact hN n hn,
+  },
+  
+
+end
+
 def seq_converges (a : ℕ → X) :=
 ∃(L : X), seq_lim X d a L
 
-def convergent_seqs :=
-{a : ℕ → X | seq_converges X d a}
-
+def is_complete : Prop := ∀(x : ℕ → X)(hx : is_cauchy X d x), seq_converges X d x
 
 def seq_equiv (a b: ℕ → X) :=
 ∀(ε : ℝ)(hε : ε > 0),∃(N : ℕ),∀(n : ℕ)(hn: n ≥ N), d (a n) (b n) < ε
@@ -366,4 +399,188 @@ lemma equiv_seqs_same_limit (x y : ℕ → X) (hxy : seq_equiv X d x y) (L : X) 
   rw seq_lim_defs,
   unfold seq_lim2 at *,
   assumption,
+ end
+
+def is_bound_for_seq (M : ℝ) (x : ℕ → ℝ) : Prop := ∀n:ℕ, |x n| ≤ M 
+def is_upper_bound_for_seq (M : ℝ) (x : ℕ → ℝ) : Prop := ∀n:ℕ, x n ≤ M
+def is_lower_bound_for_seq (M : ℝ) (x : ℕ → ℝ) : Prop := ∀n:ℕ, x n ≥ M
+
+
+def is_bounded_above_seq (x : ℕ → ℝ) : Prop := ∃M:ℝ, (is_upper_bound_for_seq M x)
+def is_bounded_below_seq (x : ℕ → ℝ) : Prop := ∃M:ℝ, (is_lower_bound_for_seq M x)
+def is_bounded_seq (x : ℕ → ℝ) : Prop := is_bounded_above_seq x ∧ is_bounded_below_seq x
+def is_increasing_seq (x : ℕ → ℝ) : Prop := ∀(n m : ℕ) (hnm : n ≤ m), x n ≤ x m
+def is_decreasing_seq (x : ℕ → ℝ) : Prop := ∀(n m : ℕ) (hnm : n ≤ m), x n ≥ x m
+def is_monotone_seq (x : ℕ → ℝ) : Prop := is_increasing_seq x ∨ is_decreasing_seq x
+def is_extraction (φ: ℕ → ℕ) : Prop := ∀(n m : ℕ) (hnm : n < m), φ n < φ m
+
+lemma extraction_geq_id (φ: ℕ → ℕ) (hφ : is_extraction φ) : ∀n:ℕ, n ≤ φ n :=
+begin 
+  intro n,
+  induction n with d hd,
+  exact zero_le (φ 0),
+
+  have temp1 := hφ d d.succ (lt_add_one d),
+  have temp2 : d < φ d.succ := gt_of_gt_of_ge temp1 hd,
+  exact nat.succ_le_iff.mpr temp2,
+end
+
+def is_subseq (y x : ℕ → ℝ) : Prop := ∃(φ: ℕ → ℕ) (hφ : is_extraction φ), y = x ∘ φ
+
+
+theorem monotone_convergence_increasing {x : ℕ → ℝ}
+ (hx_increases : is_increasing_seq x)
+(hx_bounded_above : is_bounded_above_seq x) : seq_converges ℝ dist_real x :=
+begin 
+  let xSet := {z : ℝ | ∃n:ℕ, x n = z},
+  have xSet_nonempty : xSet.nonempty,
+  {
+    use x 0,
+    use 0,
+  },
+
+  have xSet_bounded_above : bdd_above xSet,
+  {
+    cases hx_bounded_above with M hM,
+    use M,
+    intros a ha,
+    cases ha with n hn,
+    rw ← hn,
+    exact hM n,
+  },
+
+  cases (real.exists_is_lub xSet xSet_nonempty xSet_bounded_above) with s hs,
+
+  use s,
+  intros ε hε,
+
+  have : ∃(a : ℝ)(ha : a ∈ xSet), a > s-ε,
+  {
+    by_contradiction,
+    push_neg at h,
+    have contr : (s-ε) ∈ upper_bounds xSet := h,
+    have : s ≤ s-ε := (is_lub_le_iff hs).mpr contr,
+    have t : s-ε < s := by linarith, 
+    linarith,
+  },
+
+  cases this with a ha,
+  cases ha with ha has,
+  cases ha with N hN,
+  rw ← hN at has,clear hN a,rename has hN,
+
+  use N,
+  intros n hn,
+
+  have calc1 : x n ≤ s,
+  {
+    have : x n ∈ xSet := by use n,
+    exact hs.left this,
+  },
+
+
+  have half_1 := calc x n ≤ s: calc1
+  ... < s + ε : by linarith,
+
+  have half_2 := calc s-ε < x N : hN
+  ... ≤ x n : hx_increases N n hn,
+
+  have t1 : x n - s < ε  := by linarith,
+  have t2 : -ε < x n - s := by linarith,
+  unfold dist_real,
+  have almost : -ε < x n - s ∧ x n - s < ε := ⟨t2, t1⟩,
+  exact abs_lt.mpr almost,
+end
+
+theorem monotone_convergence_decreasing {x : ℕ → ℝ}
+ (hx_decreases : is_decreasing_seq x)
+(hx_bounded_below : is_bounded_below_seq x) : seq_converges ℝ dist_real x :=
+begin 
+  have hnew_seq_increasing : is_increasing_seq (λn, (-1) * (x n)) := sorry,
+  have hnew_seq_bdd_above  : is_bounded_above_seq (λn, (-1) * (x n)) := sorry,
+  have hnew_seq_converges  := monotone_convergence_increasing 
+   hnew_seq_increasing hnew_seq_bdd_above,
+
+  cases hnew_seq_converges with L hL,
+  have almost := lim_of_mult_const_seq (λn, (-1) * (x n)) L hL (-1),
+  sorry,
+end
+
+lemma cauchy_seq_of_reals_is_bounded (x : ℕ → ℝ) (hx : is_cauchy ℝ dist_real x) :
+is_bounded_seq x := sorry
+
+def is_peak_term (n : ℕ) (x : ℕ → ℝ) : Prop := ∀m : ℕ, x m ≤ x n
+
+open_locale classical
+
+lemma seq_has_monotone_subseq (x : ℕ → ℝ) : ∃(y:ℕ → ℝ) (hy : is_subseq y x),
+is_monotone_seq y := sorry
+
+def subseq_of_bdd {x: ℕ → ℝ} (hx : is_bounded_seq x) {y : ℕ → ℝ}
+(hy : is_subseq y x) : is_bounded_seq y := sorry
+
+
+theorem bolzano_weierstrass (x: ℕ → ℝ) (hx : is_bounded_seq x) : 
+ ∃(y : ℕ → ℝ) (hy : is_subseq y x), seq_converges ℝ dist_real y := 
+ begin 
+   cases seq_has_monotone_subseq x with y hy,
+   cases hy with hy_subseq hy_monotone,
+   have hy_bounded := subseq_of_bdd hx hy_subseq,
+
+   use y,
+   split,
+   {exact hy_subseq},
+   cases hy_monotone,
+   {exact monotone_convergence_increasing hy_monotone hy_bounded.1},
+   {exact monotone_convergence_decreasing hy_monotone hy_bounded.2},
+ end
+
+theorem reals_are_complete : is_complete ℝ dist_real := 
+begin 
+  intros x hx,
+  have subseq_converges := 
+  bolzano_weierstrass x (cauchy_seq_of_reals_is_bounded x hx),
+
+  rcases subseq_converges with ⟨y, hy_subseq, y_lim, hy_lim⟩,
+  use y_lim,
+
+  intros ε hε,
+  cases hx (ε/2) (by linarith) with N₁ hN₁,
+  use N₁,
+  intros n hn,
+
+  cases hy_lim (ε/2) (by linarith) with N₂ hN₂,
+  let N := max N₁ N₂,
+
+  have calc1 : dist_real (y N) y_lim < ε/2,
+  {
+    exact hN₂ N (le_max_right N₁ N₂),
+  },
+
+  have calc2: dist_real (x n) (y N) < ε/2,
+  {
+    cases hy_subseq with φ hφ,
+    cases hφ with hφ hyxφ,
+    have hφN : φ N ≥ N₁,
+    {
+      have := extraction_geq_id φ hφ N,
+      exact le_of_max_le_left this,
+    },
+    have : y N = x (φ N) := (congr_fun hyxφ N).trans rfl,
+    rw this,
+    exact hN₁ n (φ N) hn hφN,
+  },
+
+
+  calc dist_real (x n) y_lim ≤ dist_real (x n) (y N) + dist_real (y N) y_lim :
+  real_is_metric_space.right.right (x n) y_lim (y N)
+  ... < ε : by linarith,
+end
+
+
+
+lemma cauchy_lim_of_dist (x y : ℕ → X) (hx : is_cauchy X d x) 
+ (hx : is_cauchy X d y) : seq_converges ℝ dist_real (λn:ℕ, d (x n) (y n)) :=
+ begin 
+   sorry,
  end
