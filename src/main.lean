@@ -17,7 +17,6 @@ structure metric_space (X : Type) :=
 
 variables {X : Type} (mX : metric_space X)
 
-
 def dist_real : ℝ → ℝ → ℝ := λ (a b : ℝ), |a - b|
 
 @[simp]lemma dist_real_to_zero : ∀(x : ℝ), dist_real x 0 = |x| :=
@@ -71,6 +70,12 @@ begin
   rw sub_zero x,
 end
 
+@[simp]lemma dist_self : ∀(x : X), mX.d x x = 0 := 
+begin 
+  intros x,
+  rw mX.refl x x,
+end
+
 
 lemma dist_nonneg : 
 ∀(x y : X), mX.d x y  ≥ 0 := 
@@ -83,7 +88,24 @@ begin
   linarith,
 end
 
-lemma abs_of_dist (x y : X) : |mX.d x y| = mX.d x y :=
+lemma mR_dist_of_dist : ∀(x y z : X), mR.d (mX.d x y) (mX.d x z) ≤ mX.d z y :=
+begin 
+  simp,
+  intros x y z,
+  rw abs_le,
+  split,
+  {
+    have := mX.triangle x z y,
+    rw mX.symm y z at this,
+    linarith,
+  },
+  {
+    have := mX.triangle x y z,
+    linarith,
+  },
+end
+
+@[simp]lemma abs_of_dist (x y : X) : |mX.d x y| = mX.d x y :=
 begin 
   simp,
   exact dist_nonneg mX x y,
@@ -178,7 +200,6 @@ begin
     use N,
     intros n hn,
     simp,
-    rw abs_of_dist,
     exact hN n hn,
   },
   {
@@ -188,7 +209,6 @@ begin
     intros n hn,
     specialize hN n hn,
     simp at *,
-    rw abs_of_dist at hN,
     exact hN,
   },
 end
@@ -273,41 +293,25 @@ theorem seq_squeeze (x y z : ℕ → ℝ) (L : ℝ)
  (hxy : ∀(n : ℕ), x n ≤ y n) (hyz : ∀(n : ℕ), y n ≤ z n) :
  seq_lim mR y L :=
 begin
-  
   intros ε hε,
-  have hxz_equiv := seqs_equiv_if_same_limit mR x z L hx hz,
-  cases hxz_equiv (ε/2) (by linarith) with N₁ hN₁,
-  cases hx (ε/2) (by linarith) with N₂ hN₂,
-  use max N₁ N₂,
+
+  specialize hx (ε/2) (half_pos hε),
+  specialize hz (ε/2) (half_pos hε),
+
+  cases hx with N₁ hN₁,
+  cases hz with N₂ hN₂,
+  let N := max N₁ N₂,
+  use N,
+
   intros n hn,
-  have t1 : 0 ≤ (y n) - (x n) := sub_nonneg.mpr (hxy n),
-  have t2 : (y n) - (x n) ≤ (z n) - (x n) := sub_le_sub_right (hyz n) (x n),
-  have t3 : 0 ≤ (z n) - (x n) := le_trans t1 t2,
-  have t4 : |(y n) - (x n)| = (y n) - (x n) := abs_eq_self.mpr t1,
-  have t5 : |(z n) - (x n)| = (z n) - (x n) := abs_eq_self.mpr t3,
-  rw ← t5 at t2,
-  rw ← t4 at t2,
+  specialize hN₁ n (le_of_max_le_left hn),
+  specialize hN₂ n (le_of_max_le_right hn),
+  specialize hxy n,
+  specialize hyz n,
+  simp at *,
+  rw abs_lt at *,
 
-  have t6 : |(z n) - (x n)| < ε/2,
-  {
-    specialize hN₁ n,
-    have temp1 := hN₁ (le_of_max_le_left hn),
-    have temp2 : |(z n) - (x n)| = |(x n) - (z n)| := abs_sub_comm (z n) (x n), 
-    rw temp2,
-    exact temp1,
-  },
-
-  have t7 : |(y n) - (x n)| < ε/2 := gt_of_gt_of_ge t6 t2,
-  have t8 : |(x n) - L| < ε/2,
-  {
-    specialize hN₂ n (le_of_max_le_right hn),
-    exact hN₂,
-  },
-  have t9 : | (y n) - (x n)| + |(x n) - L| < ε := by linarith,
-  
-  calc dist_real (y n) L ≤ dist_real (y n) (x n) + dist_real (x n) L : 
-  mR.triangle (y n) L (x n)
-  ... < ε : t9,
+  exact ⟨by linarith, by linarith⟩,
 end
 
 lemma sum_of_lims_is_lim_of_sum (x y : ℕ → ℝ) (L1 L2 : ℝ)
@@ -323,11 +327,6 @@ begin
   specialize hN₁ n (le_of_max_le_left hn),
   specialize hN₂ n (le_of_max_le_right hn),
 
-  have t : (λn, (x n) + (y n)) n = (x n) + (y n) := by refl,
-  rw t, 
-
-  have temp : |(x n - L1)| + |(y n - L2)| =
-   dist_real (x n) L1 + dist_real (y n) L2 := by refl,
   simp at *,
 
   calc dist_real (x n + y n) (L1 + L2)  = |(x n + y n) - (L1 + L2)| : by refl
@@ -426,6 +425,39 @@ def is_decreasing_seq (x : ℕ → ℝ) : Prop := ∀(n m : ℕ) (hnm : n ≤ m)
 def is_monotone_seq (x : ℕ → ℝ) : Prop := is_increasing_seq x ∨ is_decreasing_seq x
 def is_extraction (φ: ℕ → ℕ) : Prop := ∀(n m : ℕ) (hnm : n < m), φ n < φ m
 
+lemma extraction_iff (φ: ℕ → ℕ) : is_extraction φ ↔ ∀n, φ n < φ (n + 1) :=
+begin 
+  split,
+  {
+    intros h n,
+    exact h n (n + 1) (lt_add_one n),
+  },
+  {
+    intro h,
+    have almost : ∀ (n d : ℕ), φ n < φ (n + d + 1),
+    {
+      intros n d,
+      induction d with d hd,
+      {
+        simp,
+        exact h n,
+      },
+      {
+        specialize h (n + d + 1),
+        rw ← nat.add_one,
+        have : n + (d + 1) + 1 = n + d + 1 + 1 := by ring,
+        rw this,
+        linarith,
+      },
+    },
+
+    intros n m hnm,
+    have hd : ∃(d : ℕ), m = n + d + 1 := nat.exists_eq_add_of_lt hnm,
+    cases hd with d hd,
+    rw hd,
+    exact almost n d,
+  },
+end
 lemma extraction_geq_id (φ: ℕ → ℕ) (hφ : is_extraction φ) : ∀n:ℕ, n ≤ φ n :=
 begin 
   intro n,
@@ -537,11 +569,91 @@ begin
   finish,
 end
 
-lemma cauchy_seq_of_reals_is_bounded (x : ℕ → ℝ) (hx : is_cauchy mR x) :
-is_bounded_seq x := sorry
+lemma bounded_iff (f : ℕ → ℝ) : is_bounded_seq f ↔ ∃ M : ℝ, ∀n : ℕ, |f n| ≤ M :=
+begin 
+	split,
+	{
+		intro h,
+		unfold is_bounded_seq is_bounded_above_seq is_bounded_below_seq at h,
+		rcases h with ⟨⟨M1, hM1⟩, ⟨M2, hM2⟩⟩,
+		use max M1 (-M2),
+		intro n,
+		specialize hM1 n,
+		specialize hM2 n,
+		rw abs_le,
+		split,
+		{
+			suffices : max M1 (-M2) ≥ - f n, exact neg_le.mp this,
+			exact le_max_of_le_right (neg_le_neg hM2),
+		},
+		{exact le_max_of_le_left hM1}
+	},
+	{
+		intro h,
+		cases h with M hM,
+		split,
+		{
+			use M,
+			intros n,
+			exact le_of_abs_le (hM n),
+		},
+		{
+			use -M,
+			intros n,
+			exact neg_le_of_abs_le (hM n),
+		},
+	},
+end
+
+lemma fin_is_bounded (f : ℕ → ℝ) (N : ℕ) : ∃M : ℝ, ∀n ≤ N, |f n| ≤ M :=
+begin
+	induction N with N hN,
+	{
+		use |f 0|,
+		intros n hn,
+		rw nat.le_zero_iff.mp hn,
+	},
+	{
+		rcases hN with ⟨M, hM⟩,
+		use max (|f N.succ|) M,
+		intros n hn,
+		cases lt_or_eq_of_le hn,
+		{
+			rw nat.lt_succ_iff at h,
+			have := hM n h,
+			exact le_max_of_le_right (hM n h),
+		},
+
+		rw← h,
+		exact le_max_left (|f n|) M,
+	}
+end
+
+lemma cauchy_seq_of_reals_is_bounded (f : ℕ → ℝ) (hx : is_cauchy mR f) :
+is_bounded_seq f := 
+begin 
+  specialize hx 1 zero_lt_one,
+  cases hx with N hN,
+	rcases fin_is_bounded f N with ⟨M, hM⟩,
+	rw bounded_iff f,
+	use max M (|f N| + 1),
+	intros n,
+	by_cases hn : n ≤ N,
+	{
+		exact le_max_of_le_left (hM n hn),
+	},
+	{
+		have := hN N n (rfl.ge) (le_of_not_ge hn),
+		simp at this,
+		have almost : |f n| - |f N| ≤ 1,
+		calc |f n| - |f N| ≤ |f n - f N| : abs_sub_abs_le_abs_sub (f n) (f N)
+		... = |f N - f n| : abs_sub_comm (f n) (f N)
+		... ≤  1 : le_of_lt this,
+		exact le_max_of_le_right (by linarith),
+	}
+end
 
 def is_peak_term (n : ℕ) (x : ℕ → ℝ) : Prop := ∀(m : ℕ)(hm: m ≥ n), x m ≤ x n
-
 
 noncomputable def peak_func {x : ℕ → ℝ}(h : ∀(n : ℕ), ∃(m : ℕ)(hmn : m > n),(is_peak_term m x)) :
 ℕ → ℕ 
@@ -585,7 +697,7 @@ begin
   },
 end
 
-lemma subseq_of_bdd {x: ℕ → ℝ} (hx : is_bounded_seq x) {y : ℕ → ℝ}
+lemma bdd_of_subseq_of_bdd {x: ℕ → ℝ} (hx : is_bounded_seq x) {y : ℕ → ℝ}
 (hy : is_subseq y x) : is_bounded_seq y := 
 begin 
   split,
@@ -613,7 +725,7 @@ theorem bolzano_weierstrass (x: ℕ → ℝ) (hx : is_bounded_seq x) :
  begin 
    cases seq_has_monotone_subseq x with y hy,
    cases hy with hy_subseq hy_monotone,
-   have hy_bounded := subseq_of_bdd hx hy_subseq,
+   have hy_bounded := bdd_of_subseq_of_bdd hx hy_subseq,
 
    use y,
    split,
@@ -666,9 +778,95 @@ begin
 end
 
 
+def seq_diff (x y : ℕ → X) := λ n : ℕ, mX.d (x n) (y n)
 
-lemma cauchy_lim_of_dist (x y : ℕ → X) (hx : is_cauchy mX x) 
- (hx : is_cauchy mX y) : seq_converges mR (λn:ℕ, mX.d (x n) (y n)) :=
+lemma cauchy_lim_of_dist {x y : ℕ → X} (hx : is_cauchy mX x) 
+ (hy : is_cauchy mX y) : seq_converges mR (seq_diff mX x y) :=
  begin 
-   sorry,
- end
+  apply reals_are_complete,
+  intros ε hε,
+  cases hx (ε/2) (by linarith) with N₁ hN₁,
+  cases hy (ε/2) (by linarith) with N₂ hN₂,
+  let N := max N₁ N₂,
+  use N,
+  intros n m hn hm,
+
+  specialize hN₁ n m (le_of_max_le_left hn) (le_of_max_le_left hm),
+  specialize hN₂ n m (le_of_max_le_right hn) (le_of_max_le_right hm),
+   
+  have calc1 := mR.triangle (mX.d (x n) (y n)) (mX.d (x m) (y m)) (mX.d (x m) (y n)),
+  have calc2 := mR_dist_of_dist mX (y n) (x m) (x n),
+  rw mR.symm at calc2,
+  rw mX.symm (y n) (x m) at calc2,
+  rw mX.symm (y n) (x n) at calc2,
+
+  have calc3 := mR_dist_of_dist mX (x m) (y m) (y n),
+  rw mR.symm at calc3,
+
+
+  calc mR.d (mX.d (x n) (y n)) (mX.d (x m) (y m)) ≤
+  mR.d (mX.d (x n) (y n)) (mX.d (x m) (y n)) + mR.d (mX.d (x m) (y n)) (mX.d (x m) (y m)):
+    calc1
+   ... < ε : by linarith,
+end
+
+
+lemma seq_equiv_is_equiv : is_equiv (ℕ → X) (seq_equiv mX) :=
+{
+  refl := begin 
+    intros a ε hε,
+    use 0,
+    intros n hn,
+    simp,
+    exact hε,
+  end,
+  symm := begin 
+    intros a b hab,
+    intros ε hε,
+    cases hab ε hε with N hN,
+    use N,
+    intros n hn,
+    rw mX.symm,
+    exact hN n hn,
+  end,
+  trans := begin 
+    intros a b c hab hbc ε hε,
+
+    specialize hab (ε/2) (half_pos hε),
+    specialize hbc (ε/2) (half_pos hε),
+
+    cases hab with N₁ hN₁,
+    cases hbc with N₂ hN₂,
+    use max N₁ N₂,
+
+    intros n hn,
+
+    specialize hN₁ n (le_of_max_le_left hn),
+    specialize hN₂ n (le_of_max_le_right hn),
+    
+    calc mX.d (a n) (c n) ≤ mX.d (a n) (b n) + mX.d (b n) (c n) : mX.triangle (a n) (c n) (b n)
+    ... < ε : by linarith,
+  end
+}
+
+def cl (x : ℕ → X) := {s : ℕ → X | seq_equiv mX x s}
+
+def almost_d {x y : ℕ → X} (hx : is_cauchy mX x) (hy : is_cauchy mX y) : ℝ :=
+classical.some (cauchy_lim_of_dist mX hx hy)
+
+example {x y : ℕ → X} (hx : is_cauchy mX x) (hy : is_cauchy mX y) : 
+seq_lim mR (seq_diff mX x y) (almost_d mX hx hy) :=
+begin 
+  sorry
+end
+
+def almost_d_const_on_equiv {a b x y : ℕ → X} (ha : is_cauchy mX a) (hb : is_cauchy mX b) 
+(hx : is_cauchy mX x) (hy : is_cauchy mX y) 
+(hax : seq_equiv mX a x) (hby : seq_equiv mX b y) :
+almost_d mX hx hy = almost_d mX ha hb :=
+begin 
+  unfold almost_d,
+  unfold classical.some,
+  unfold classical.indefinite_description,
+  sorry,
+end
