@@ -660,11 +660,6 @@ noncomputable def peak_func {f : ℕ → ℝ}
 | 0 := classical.some (h 0) 
 | (b+1) := classical.some (h (peak_func b)) 
 
-noncomputable def peak_func_2 {f : ℕ → ℝ} {N : ℕ}
-(h : ∀ (m : ℕ), m > N → (∃ (m_1 : ℕ), m_1 ≥ m ∧ f m < f m_1)) : ℕ → ℕ
-| 0 := classical.some (h (N+1) (by linarith))
-| (b+1) := classical.some (h ((peak_func_2 b) + N + 1) (by linarith)) + 1
-
 lemma peak_func_is_extraction {f : ℕ → ℝ}
 (h : ∀(n : ℕ), ∃(m : ℕ)(hmn : m > n),(is_peak_term m f)):
  is_extraction (peak_func h) := 
@@ -715,8 +710,92 @@ begin
 	}
 end
 
+noncomputable def peak_func2 {f : ℕ → ℝ} {N : ℕ}
+(h : ∀(m : ℕ), (∃ (l : ℕ), m > N → l > m ∧ f m < f l)) : ℕ → ℕ
+| 0 := classical.some (h (N+1))
+| (b+1) := classical.some (h (peak_func2 b))
 
-lemma seq_has_monotone_subseq (x : ℕ → ℝ) : ∃(y:ℕ → ℝ) (hy : is_subseq y x),
+lemma peak_func2_gt_N {f : ℕ → ℝ} {N : ℕ}
+(h : ∀(m : ℕ), (∃ (l : ℕ), m > N → l > m ∧ f m < f l)) : ∀n, peak_func2 h n > N :=
+begin 
+intro n,
+induction n with d hd,
+{
+	have obv0 : peak_func2 h 0 = classical.some (h (N+1)) := rfl,
+	have h0 := classical.some_spec (h (N+1)) (lt_add_one N),
+	rw obv0,
+	linarith,
+},
+{
+		have obv1 : peak_func2 h (d.succ) = classical.some (h (peak_func2 h d)),
+		unfold peak_func2,
+		finish,
+		
+
+	have h1 := classical.some_spec (h (peak_func2 h d)) hd,
+	rw← obv1 at h1,
+	linarith,
+}
+end
+
+lemma peak_func2_is_extraction {f : ℕ → ℝ} {N : ℕ}
+(h : ∀(m : ℕ), (∃ (l : ℕ), m > N → l > m ∧ f m < f l)) : 
+is_extraction (peak_func2 h) := 
+begin
+	rw extraction_iff,
+	intros n,
+	induction n with d hd,
+	{
+		simp,
+		have obv0 : peak_func2 h 0 = classical.some (h (N+1)) := rfl,
+		change classical.some (h (N+1)) < classical.some (h (peak_func2 h 0)),
+		have h0 := classical.some_spec (h (N+1)) (lt_add_one N),
+		have h1 := classical.some_spec (h (peak_func2 h 0)),
+		rw obv0 at h1,
+		specialize h1 (by linarith),
+		exact h1.1,
+	},
+	{
+		have obv : peak_func2 h (d.succ + 1) = classical.some (h (peak_func2 h d.succ)) := rfl,
+		have h1 := classical.some_spec (h (peak_func2 h d.succ))
+		 (peak_func2_gt_N h d.succ),
+		rw← obv at h1,
+		exact h1.1,
+	}
+end
+
+ lemma peak_func2_is_increasing {f : ℕ → ℝ} {N : ℕ}
+ (h : ∀(m : ℕ), (∃ (l : ℕ), m > N → l > m ∧ f m < f l)) : is_increasing_seq
+  (f ∘ (peak_func2 h)) :=
+ begin 
+	intros n m hnm,
+	induction m with d hd generalizing n,
+	{rw nat.le_zero_iff.mp hnm},
+	{
+		rw le_iff_lt_or_eq at hnm,
+		cases hnm,
+		{
+			rw nat.lt_succ_iff at hnm,
+			have : (f ∘ (peak_func2 h)) d ≤ (f ∘ (peak_func2 h)) d.succ,
+			{
+				have h1 := classical.some_spec (h (peak_func2 h d)) (peak_func2_gt_N h d),
+				simp at *,
+				have obv : peak_func2 h d.succ = classical.some (h (peak_func2 h d)),
+				{
+					unfold peak_func2,
+					finish,
+				},
+				rw← obv at h1,
+				exact le_of_lt h1.2,
+			},
+			specialize hd n hnm,
+			exact le_trans hd this,
+		},
+		{rw hnm}
+	}
+ end
+
+lemma seq_has_monotone_subseq (x : ℕ → ℝ) : ∃(y : ℕ → ℝ) (hy : is_subseq y x),
 is_monotone_seq y := 
 begin 
   by_cases ∀(n : ℕ), ∃(m : ℕ)(hmn : m > n),(is_peak_term m x),
@@ -741,29 +820,39 @@ begin
     unfold is_peak_term at h,
     push_neg at h,
 		cases h with N hN,
-		choose φ' hφ' hxφ' using hN,
-		set φ := λ m, φ' (m + N + 1) (by linarith),
-		use x ∘ φ,
+		have h : ∀(m : ℕ), (∃ (l : ℕ), m > N → l > m ∧ x m < x l),
+		{
+			intros m,
+			by_cases hm : m > N,
+			{
+				cases hN m hm with l hl,
+				rw ge_iff_le at hl,
+				rw le_iff_lt_or_eq at hl, cases hl.1,
+				
+				use l,
+				intro gbg,
+				exact ⟨h, hl.2⟩,
+
+
+				exfalso,
+				rw h at hl,
+				linarith,
+			},
+			{
+				use 0,
+			},
+		},
+
+		use x ∘ (peak_func2 h),
 		split,
 		{
-			use φ,
-			split,
-			rw extraction_iff,
-			intros n,
-			induction n with d hd,
-			{
-				simp,
-				change φ' (0 + N + 1) (by linarith) < φ'(1 + N + 1) (by linarith),
-				simp,
-				-- have h1 := hφ' (0 + N +)
-				sorry,
-			},
-
-			sorry,
-			refl,
+			use peak_func2 h,
+			exact ⟨peak_func2_is_extraction h, rfl⟩,
 		},
-    sorry
-  },
+		{
+			exact or.inl (peak_func2_is_increasing h),
+		},
+  }
 end
 
 lemma bdd_of_subseq_of_bdd {x: ℕ → ℝ} (hx : is_bounded_seq x) {y : ℕ → ℝ}
