@@ -7,7 +7,7 @@ noncomputable theory
 
 def dist_refl {X : Type} (d : X → X → ℝ)   := ∀(x y : X), d x y = 0 ↔ x = y
 def dist_symm {X : Type} (d : X → X → ℝ)   := ∀(x y : X), d x y = d y x
-def dist_triangle{X : Type}(d : X → X → ℝ) := ∀(x y z : X), d x y ≤  d x z + d z y
+def dist_triangle {X : Type} (d : X → X → ℝ) := ∀(x y z : X), d x y ≤  d x z + d z y
 
 structure metric_space (X : Type) := 
 (d : X → X → ℝ)
@@ -655,18 +655,65 @@ end
 
 def is_peak_term (n : ℕ) (x : ℕ → ℝ) : Prop := ∀(m : ℕ)(hm: m ≥ n), x m ≤ x n
 
-noncomputable def peak_func {x : ℕ → ℝ}(h : ∀(n : ℕ), ∃(m : ℕ)(hmn : m > n),(is_peak_term m x)) :
-ℕ → ℕ 
+noncomputable def peak_func {f : ℕ → ℝ} 
+(h : ∀(n : ℕ), ∃(m : ℕ)(hmn : m > n),(is_peak_term m f)) : ℕ → ℕ 
 | 0 := classical.some (h 0) 
 | (b+1) := classical.some (h (peak_func b)) 
 
-lemma peak_func_is_extraction {x : ℕ → ℝ}
-(h : ∀(n : ℕ), ∃(m : ℕ)(hmn : m > n),(is_peak_term m x)):
- is_extraction (peak_func h) := sorry
+noncomputable def peak_func_2 {f : ℕ → ℝ} {N : ℕ}
+(h : ∀ (m : ℕ), m > N → (∃ (m_1 : ℕ), m_1 ≥ m ∧ f m < f m_1)) : ℕ → ℕ
+| 0 := classical.some (h (N+1) (by linarith))
+| (b+1) := classical.some (h ((peak_func_2 b) + N + 1) (by linarith)) + 1
+
+lemma peak_func_is_extraction {f : ℕ → ℝ}
+(h : ∀(n : ℕ), ∃(m : ℕ)(hmn : m > n),(is_peak_term m f)):
+ is_extraction (peak_func h) := 
+ begin 
+	unfold is_extraction,
+	intros n m hnm,
+	induction m with d hd generalizing n,
+	{
+		exfalso,
+		exact nat.not_lt_zero n hnm,
+	},
+	{
+		rw nat.succ_eq_add_one,
+		have hdsucc : peak_func h d < peak_func h (d+1),
+		{
+			cases classical.some_spec (h (peak_func h d)) with h1 h2,
+			unfold peak_func,
+			finish,
+		},
+		rw nat.lt_succ_iff at hnm,
+		rw le_iff_lt_or_eq at hnm,
+		cases hnm,
+		{
+			exact lt_trans (hd n hnm) hdsucc,
+		},
+		{
+			rw hnm,
+			exact hdsucc,
+		},
+	},
+end
 
  lemma peak_func_is_peaks {x : ℕ → ℝ}
 (h : ∀(n : ℕ), ∃(m : ℕ)(hmn : m > n),(is_peak_term m x)) : 
-∀(n : ℕ), is_peak_term (peak_func h n) x := sorry
+∀(n : ℕ), is_peak_term (peak_func h n) x := 
+begin 
+	intros n,
+	cases n,
+	{
+		unfold peak_func,
+		cases classical.some_spec (h 0) with h1 h2,
+		exact h2,
+	},
+	{
+		cases classical.some_spec (h (peak_func h n)) with h1 h2,
+		unfold peak_func,
+		finish,
+	}
+end
 
 
 lemma seq_has_monotone_subseq (x : ℕ → ℝ) : ∃(y:ℕ → ℝ) (hy : is_subseq y x),
@@ -693,6 +740,28 @@ begin
   {
     unfold is_peak_term at h,
     push_neg at h,
+		cases h with N hN,
+		choose φ' hφ' hxφ' using hN,
+		set φ := λ m, φ' (m + N + 1) (by linarith),
+		use x ∘ φ,
+		split,
+		{
+			use φ,
+			split,
+			rw extraction_iff,
+			intros n,
+			induction n with d hd,
+			{
+				simp,
+				change φ' (0 + N + 1) (by linarith) < φ'(1 + N + 1) (by linarith),
+				simp,
+				-- have h1 := hφ' (0 + N +)
+				sorry,
+			},
+
+			sorry,
+			refl,
+		},
     sorry
   },
 end
