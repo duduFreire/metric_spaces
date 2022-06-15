@@ -180,7 +180,7 @@ begin
 end
 
 def seq_converges (a : ℕ → X) :=
-∃(L : X), @seq_lim X mX a L
+∃(L : X), seq_lim mX a L
 
 def is_complete : Prop := ∀(x : ℕ → X)(hx : is_cauchy mX x), seq_converges mX x
 
@@ -230,7 +230,7 @@ seq_equiv mX a b ↔ seq_equiv mX b a :=
 ⟨seq_equiv_almost_symm mX a b, seq_equiv_almost_symm mX b a⟩
 
 
-lemma equiv_is_cauchy (x : ℕ → X) (y : ℕ → X)
+lemma cauchy_of_equiv_to_cauchy (x : ℕ → X) (y : ℕ → X)
 (hx : is_cauchy mX x) (hxy: seq_equiv mX x y) : is_cauchy mX y :=
 begin 
   intros ε hε,
@@ -267,7 +267,7 @@ begin
   ... < ε : hcalc2,
 end
 
-lemma seqs_equiv_if_same_limit (x y : ℕ → X) (L : X) 
+lemma seq_equiv_of_eq_limit (x y : ℕ → X) (L : X) 
 (hx : seq_lim mX x L) (hy : seq_lim mX y L) : seq_equiv mX x y :=
 
 begin 
@@ -336,7 +336,7 @@ begin
 end
 
 
-lemma equiv_seqs_same_limit (x y : ℕ → X) (hxy : seq_equiv mX x y) (L : X) :
+lemma eq_lim_of_equiv_seqs (x y : ℕ → X) (hxy : seq_equiv mX x y) (L : X) :
  seq_lim mX x L → seq_lim mX y L
 :=
  begin 
@@ -567,6 +567,15 @@ begin
   intros n hn,
   specialize hN n hn,
   finish,
+end
+
+theorem monotone_convergence {x : ℕ → ℝ} : 
+is_bounded_seq x → is_monotone_seq x → seq_converges mR x :=
+begin 
+	intros hx_bdd hx_mono,
+	cases hx_mono,
+	{exact monotone_convergence_increasing hx_mono hx_bdd.1},
+	{exact monotone_convergence_decreasing hx_mono hx_bdd.2},
 end
 
 lemma bounded_iff (f : ℕ → ℝ) : is_bounded_seq f ↔ ∃ M : ℝ, ∀n : ℕ, |f n| ≤ M :=
@@ -878,26 +887,21 @@ begin
 end
 
 
-theorem bolzano_weierstrass (x: ℕ → ℝ) (hx : is_bounded_seq x) : 
+theorem bolzano_weierstrass {x: ℕ → ℝ} (hx : is_bounded_seq x) : 
  ∃(y : ℕ → ℝ) (hy : is_subseq y x), seq_converges mR y := 
- begin 
-   cases seq_has_monotone_subseq x with y hy,
-   cases hy with hy_subseq hy_monotone,
+begin 
+	 rcases seq_has_monotone_subseq x with ⟨y, ⟨hy_subseq, hy_monotone⟩⟩,
    have hy_bounded := bdd_of_subseq_of_bdd hx hy_subseq,
 
    use y,
-   split,
-   {exact hy_subseq},
-   cases hy_monotone,
-   {exact monotone_convergence_increasing hy_monotone hy_bounded.1},
-   {exact monotone_convergence_decreasing hy_monotone hy_bounded.2},
- end
+	 exact ⟨hy_subseq, monotone_convergence hy_bounded hy_monotone⟩,
+end
 
 theorem reals_are_complete : is_complete mR := 
 begin 
   intros x hx,
   have subseq_converges := 
-  bolzano_weierstrass x (cauchy_seq_of_reals_is_bounded x hx),
+  bolzano_weierstrass (cauchy_seq_of_reals_is_bounded x hx),
 
   rcases subseq_converges with ⟨y, hy_subseq, y_lim, hy_lim⟩,
   use y_lim,
@@ -935,7 +939,6 @@ begin
   ... < ε : by linarith,
 end
 
-
 def seq_diff (x y : ℕ → X) := λ n : ℕ, mX.d (x n) (y n)
 
 lemma cauchy_lim_of_dist {x y : ℕ → X} (hx : is_cauchy mX x) 
@@ -951,7 +954,7 @@ lemma cauchy_lim_of_dist {x y : ℕ → X} (hx : is_cauchy mX x)
 
   specialize hN₁ n m (le_of_max_le_left hn) (le_of_max_le_left hm),
   specialize hN₂ n m (le_of_max_le_right hn) (le_of_max_le_right hm),
-   
+
   have calc1 := mR.triangle (mX.d (x n) (y n)) (mX.d (x m) (y m)) (mX.d (x m) (y n)),
   have calc2 := mR_dist_of_dist mX (y n) (x m) (x n),
   rw mR.symm at calc2,
@@ -967,7 +970,6 @@ lemma cauchy_lim_of_dist {x y : ℕ → X} (hx : is_cauchy mX x)
     calc1
    ... < ε : by linarith,
 end
-
 
 lemma seq_equiv_is_equiv : is_equiv (ℕ → X) (seq_equiv mX) :=
 {
@@ -1006,25 +1008,3 @@ lemma seq_equiv_is_equiv : is_equiv (ℕ → X) (seq_equiv mX) :=
     ... < ε : by linarith,
   end
 }
-
-def cl (x : ℕ → X) := {s : ℕ → X | seq_equiv mX x s}
-
-def almost_d {x y : ℕ → X} (hx : is_cauchy mX x) (hy : is_cauchy mX y) : ℝ :=
-classical.some (cauchy_lim_of_dist mX hx hy)
-
-example {x y : ℕ → X} (hx : is_cauchy mX x) (hy : is_cauchy mX y) : 
-seq_lim mR (seq_diff mX x y) (almost_d mX hx hy) :=
-begin 
-  sorry
-end
-
-def almost_d_const_on_equiv {a b x y : ℕ → X} (ha : is_cauchy mX a) (hb : is_cauchy mX b) 
-(hx : is_cauchy mX x) (hy : is_cauchy mX y) 
-(hax : seq_equiv mX a x) (hby : seq_equiv mX b y) :
-almost_d mX hx hy = almost_d mX ha hb :=
-begin 
-  unfold almost_d,
-  unfold classical.some,
-  unfold classical.indefinite_description,
-  sorry,
-end
