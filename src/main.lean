@@ -148,6 +148,27 @@ begin
   },
 end
 
+lemma lim_reals_unique {f : ℕ → ℝ} {L M : ℝ} : seq_lim mR f L →  seq_lim mR f M → L = M :=
+begin 
+	intros hfL hfM,
+	by_cases h : L = M, exact h, exfalso,
+	have ε_pos : (|L - M|/2) > 0 := half_pos (abs_pos.mpr (sub_ne_zero.mpr h)),
+
+	cases hfL (|L - M|/2) ε_pos with N₁ hN₁,
+	cases hfM (|L - M|/2) ε_pos with N₂ hN₂,
+
+	specialize hN₁ (max N₁ N₂) (le_max_left N₁ N₂),
+	specialize hN₂ (max N₁ N₂) (le_max_right N₁ N₂),
+
+	have contra : (mR.d (f (max N₁ N₂)) L) + (mR.d (f (max N₁ N₂)) M) < |L - M| :=
+	by linarith,
+
+	rw mR.symm (f (max N₁ N₂)) L at contra,
+
+	have := lt_of_le_of_lt (mR.triangle L M (f (max N₁ N₂))) contra,
+	simp at this,
+	exact this,
+end
 
 lemma lim_of_mult_const_seq (x : ℕ → ℝ) (L : ℝ) 
 (hx : seq_lim mR x L) (k : ℝ) : seq_lim mR (λn, k * (x n)) (k*L) :=
@@ -336,7 +357,7 @@ begin
 end
 
 
-lemma eq_lim_of_equiv_seqs (x y : ℕ → X) (hxy : seq_equiv mX x y) (L : X) :
+lemma eq_lim_of_equiv_seqs {x y : ℕ → X} (hxy : seq_equiv mX x y) {L : X} :
  seq_lim mX x L → seq_lim mX y L
 :=
  begin 
@@ -1008,3 +1029,158 @@ lemma seq_equiv_is_equiv : is_equiv (ℕ → X) (seq_equiv mX) :=
     ... < ε : by linarith,
   end
 }
+
+inductive cauchy_seqs
+| cauchy_seq (seq : ℕ → X) : is_cauchy mX seq → cauchy_seqs
+
+def cauchy_seqs.seq : cauchy_seqs mX → (ℕ → X)
+| (cauchy_seqs.cauchy_seq x hx) := x
+
+def cauchy_seqs.cauchy (seq : cauchy_seqs mX) : is_cauchy mX (cauchy_seqs.seq mX seq)
+:= begin 
+	cases seq with seq hseq,
+	unfold cauchy_seqs.seq,
+	exact hseq,
+end
+
+def cauchy_seqs.r : cauchy_seqs mX → cauchy_seqs mX → Prop
+| (cauchy_seqs.cauchy_seq x h1) (cauchy_seqs.cauchy_seq y h2) := 
+seq_equiv mX x y
+
+theorem cauchy_seqs_is_equiv : is_equiv
+(cauchy_seqs mX) (cauchy_seqs.r mX) := 
+{
+	refl := 
+	begin 
+		intro a,
+		cases a with a ha,
+		have := (seq_equiv_is_equiv mX).refl,
+		exact this a,
+	end,
+	symm := 
+	begin 
+		intros a b hab,
+		cases a with a ha,
+		cases b with b hb,
+		unfold cauchy_seqs.r at *,
+		have := (seq_equiv_is_equiv mX).symm,
+		exact this a b hab,
+	end,
+	trans := 
+	begin 
+		intros a b c hab hbc,
+		cases a with a ha,
+		cases b with b hb,
+		cases c with c hc,
+		unfold cauchy_seqs.r at *, 
+		have := (seq_equiv_is_equiv mX).trans,
+		exact this a b c hab hbc,
+	end,
+}
+
+lemma cauchy_seqs_equivalence : equivalence (cauchy_seqs.r mX) :=
+begin 
+	fconstructor,
+	exact (cauchy_seqs_is_equiv mX).refl,
+	fconstructor,
+	exact (cauchy_seqs_is_equiv mX).symm,
+	exact (cauchy_seqs_is_equiv mX).trans,
+end
+
+instance cauchy_seqs.setoid : setoid (cauchy_seqs mX) :=
+@setoid.mk (cauchy_seqs mX) (cauchy_seqs.r mX) 
+(cauchy_seqs_equivalence mX)
+
+def cauchy_completion := quotient (cauchy_seqs.setoid mX)
+
+open_locale classical
+
+def seq_to_lim (f : ℕ → X) : X := 
+if hf : seq_converges mX f then classical.some hf
+else f 0
+
+lemma seq_to_lim_is_lim {f : ℕ → X} (hf : seq_converges mX f) : 
+seq_lim mX f (seq_to_lim mX f) := 
+begin 
+	have : (seq_to_lim mX f) = classical.some hf := dif_pos hf,
+	rw this,
+	exact classical.some_spec hf,
+end
+
+lemma eq_lim_func_of_equiv_seqs {f g : ℕ → ℝ} (hfg : seq_equiv mR f g)
+(hf : seq_converges mR f) :
+seq_to_lim mR f = seq_to_lim mR g := 
+begin 
+	have hg_lim := (eq_lim_of_equiv_seqs mR hfg (seq_to_lim_is_lim mR hf)),
+	exact lim_reals_unique hg_lim (seq_to_lim_is_lim mR ⟨seq_to_lim mR f, hg_lim⟩),
+end
+
+def comp_dist : cauchy_seqs mX → cauchy_seqs mX → ℝ := 
+λx y, seq_to_lim mR 
+(seq_diff mX (cauchy_seqs.seq mX x) (cauchy_seqs.seq mX y))
+
+lemma comp_dist.symm : ∀ x y, comp_dist mX x y = comp_dist mX y x := 
+begin 
+	intros x y,
+	unfold comp_dist,
+	apply congr_arg,
+	ext,
+	exact mX.symm (cauchy_seqs.seq mX x x_1) (cauchy_seqs.seq mX y x_1)
+end
+
+lemma comp_dist_converges (x y : cauchy_seqs mX) : 
+seq_converges mR (seq_diff mX (cauchy_seqs.seq mX x) (cauchy_seqs.seq mX y)) := 
+cauchy_lim_of_dist mX (cauchy_seqs.cauchy mX x) (cauchy_seqs.cauchy mX y)
+
+lemma comp_dist_respects_equiv:
+∀ (x y a b : cauchy_seqs mX),
+    x ≈ a → y ≈ b → comp_dist mX x y = comp_dist mX a b :=
+begin 
+	intros x y a b hxa hyb,
+
+	cases x with x hx,
+	cases y with y hy,
+	cases a with a ha,
+	cases b with b hb,
+
+	suffices hequiv : seq_equiv mR (seq_diff mX x y) (seq_diff mX a b),
+	{exact eq_lim_func_of_equiv_seqs hequiv (cauchy_lim_of_dist mX hx hy)},
+
+	intros ε hε,
+
+	cases hxa (ε/2) (half_pos hε) with N₁ hN₁,
+	cases hyb (ε/2) (half_pos hε) with N₂ hN₂,
+	use max N₁ N₂,
+	intros n hn,
+
+	specialize hN₁ n (le_of_max_le_left hn),
+	specialize hN₂ n (le_of_max_le_right hn),
+
+	unfold seq_diff,
+
+	have h1 := lt_of_le_of_lt (mR_dist_of_dist mX (y n) (a n) (x n)) hN₁,
+	have h2 := lt_of_le_of_lt (mR_dist_of_dist mX (a n) (b n) (y n)) hN₂,
+
+	have h : mR.d (mX.d (y n) (a n)) (mX.d (y n) (x n)) +
+	mR.d (mX.d (a n) (b n)) (mX.d (a n) (y n)) < ε := by linarith, clear h1 h2,
+
+	rw mX.symm (y n) (a n) at h,
+	rw mR.symm (mX.d (a n) (b n)) (mX.d (a n) (y n)) at h,
+	rw mX.symm (y n) (x n) at h,
+	rw mR.symm (mX.d (a n) (y n)) (mX.d (x n) (y n)) at h,
+
+	exact gt_of_gt_of_ge h 
+	(mR.triangle (mX.d (x n) (y n)) (mX.d (a n) (b n)) (mX.d (a n) (y n))),
+end
+
+def comp_dist_lift := 
+quotient.lift₂ (comp_dist mX) (comp_dist_respects_equiv mX)
+
+-- def metric_comp : metric_space (cauchy_completion mX) :=
+-- {
+-- 	d := comp_dist_lift mX,
+-- 	refl :=
+-- 	begin 
+
+-- 	end
+-- }
